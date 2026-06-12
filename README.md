@@ -9,6 +9,7 @@ This system provides a complete pipeline for processing insurance policy PDFs:
 1. **Phase 1: PDF Ingestion** - Extract text from PDF files
 2. **Phase 2: Text Cleaning** - Normalize and clean extracted text
 3. **Phase 3: Document Chunking** - Split text into searchable chunks
+4. **Phase 4: Embedding Generation** - Convert chunks to vector embeddings
 
 ## Features
 
@@ -16,9 +17,10 @@ This system provides a complete pipeline for processing insurance policy PDFs:
 - Remove page numbers, headers, and footers automatically
 - Normalize whitespace and line endings
 - Split documents into overlapping chunks for efficient retrieval
+- Generate 384-dimensional vector embeddings using sentence-transformers
 - Comprehensive error handling with custom exceptions
 - Type hints and docstrings throughout
-- Full test coverage with pytest (83 tests)
+- Full test coverage with pytest (116 tests)
 - Dynamic test data generation
 
 ## Installation
@@ -35,6 +37,7 @@ pip install -r requirements.txt
 from pdf_loader import load_pdf
 from text_cleaner import clean_text
 from chunker import create_chunks
+from embedding_generator import generate_embeddings
 
 # Load PDF
 raw_text = load_pdf("policy.pdf")
@@ -45,7 +48,10 @@ cleaned_text = clean_text(raw_text)
 # Create chunks
 chunks = create_chunks(cleaned_text, chunk_size=1000, chunk_overlap=200)
 
-print(f"Created {len(chunks)} searchable chunks")
+# Generate embeddings
+embeddings = generate_embeddings(chunks)
+
+print(f"Created {len(embeddings)} vector embeddings (384-dim)")
 ```
 
 ### Phase 1: PDF Ingestion
@@ -85,6 +91,19 @@ print(f"Total chunks: {metadata['total_chunks']}")
 print(f"Avg chunk size: {metadata['avg_chunk_size']:.2f}")
 ```
 
+### Phase 4: Embedding Generation
+
+```python
+from embedding_generator import generate_embeddings, get_embedding_metadata
+
+chunks = ["Insurance policy text...", "More policy content..."]
+embeddings = generate_embeddings(chunks)
+
+metadata = get_embedding_metadata(embeddings)
+print(f"Generated {metadata['total_embeddings']} embeddings")
+print(f"Embedding dimension: {metadata['embedding_dimension']}")
+```
+
 ## Running Tests
 
 Run all tests:
@@ -94,22 +113,24 @@ pytest tests/ -v
 
 Run specific phase tests:
 ```bash
-pytest tests/test_pdf_loader.py -v      # Phase 1: 13 tests
-pytest tests/test_text_cleaner.py -v    # Phase 2: 40 tests
-pytest tests/test_chunker.py -v         # Phase 3: 30 tests
+pytest tests/test_pdf_loader.py -v           # Phase 1: 13 tests
+pytest tests/test_text_cleaner.py -v         # Phase 2: 40 tests
+pytest tests/test_chunker.py -v              # Phase 3: 30 tests
+pytest tests/test_embedding_generator.py -v  # Phase 4: 33 tests
 ```
 
 ## Running Examples
 
 Complete pipeline demonstration:
 ```bash
-python example_complete_pipeline.py
+python examples/example_complete_pipeline.py
+python examples/example_embedding_generation.py
 ```
 
 Individual phase examples:
 ```bash
-python example_pdf_ingestion.py
-python example_text_cleaning.py
+python examples/example_pdf_ingestion.py
+python examples/example_text_cleaning.py
 ```
 
 ## Project Structure
@@ -120,24 +141,28 @@ insurance_claim_agent/
 ├── pdf_loader.py               # Phase 1: PDF text extraction
 ├── text_cleaner.py             # Phase 2: Text normalization
 ├── chunker.py                  # Phase 3: Document chunking
+├── embedding_generator.py      # Phase 4: Vector embeddings
 ├── config.py                   # Configuration for text cleaning
 ├── exceptions.py               # Custom exception classes
 ├── pdf_generator.py            # Test PDF generation utility
 ├── generate_test_pdfs.py       # Standalone PDF generator script
 │
-├── example_pdf_ingestion.py    # Phase 1 example
-├── example_text_cleaning.py    # Phase 2 example
-├── example_complete_pipeline.py # Complete pipeline example
+├── examples/
+│   ├── example_pdf_ingestion.py       # Phase 1 example
+│   ├── example_text_cleaning.py       # Phase 2 example
+│   ├── example_complete_pipeline.py   # Phases 1-3 example
+│   └── example_embedding_generation.py # Complete pipeline example
 │
 ├── requirements.txt            # Dependencies
 ├── README.md                   # Documentation
 │
 └── tests/
     ├── __init__.py
-    ├── test_pdf_loader.py      # Phase 1 tests (13 tests)
-    ├── test_text_cleaner.py    # Phase 2 tests (40 tests)
-    ├── test_chunker.py         # Phase 3 tests (30 tests)
-    └── sample_pdfs/            # Auto-generated test PDFs
+    ├── test_pdf_loader.py           # Phase 1 tests (13 tests)
+    ├── test_text_cleaner.py         # Phase 2 tests (40 tests)
+    ├── test_chunker.py              # Phase 3 tests (30 tests)
+    ├── test_embedding_generator.py  # Phase 4 tests (33 tests)
+    └── sample_pdfs/                 # Auto-generated test PDFs
         └── README.md
 ```
 
@@ -208,6 +233,26 @@ insurance_claim_agent/
 ### Error Handling
 - `InvalidTextError` - Invalid input type or None
 
+## Phase 4: Embedding Generation
+
+### Features
+- Generate 384-dimensional vector embeddings
+- Uses sentence-transformers/all-MiniLM-L6-v2 model
+- Efficient batch processing
+- Model caching (singleton pattern)
+- Handles documents of any size
+- Returns metadata about embeddings
+
+### Configuration
+- Model: sentence-transformers/all-MiniLM-L6-v2
+- Embedding dimension: 384
+- Runs locally (no API calls)
+
+### Error Handling
+- `InvalidChunkError` - Invalid input chunks
+- `ModelLoadError` - Model loading failure
+- `EmbeddingError` - General embedding errors
+
 ## Pipeline Architecture
 
 ```
@@ -238,8 +283,15 @@ insurance_claim_agent/
        │
        ▼
 ┌─────────────────────┐
-│  Searchable Chunks  │
-│  Ready for RAG      │
+│  Phase 4: Embedding │  generate_embeddings()
+│  - Generate vectors │
+│  - 384 dimensions   │
+└──────┬──────────────┘
+       │
+       ▼
+┌─────────────────────┐
+│  Vector Embeddings  │
+│  Ready for Vector DB│
 └─────────────────────┘
 ```
 
@@ -250,14 +302,16 @@ insurance_claim_agent/
 - pytest 7.4.3 (testing)
 - reportlab 4.0.7 (test PDF generation)
 - langchain-text-splitters 0.3.5 (text chunking)
+- sentence-transformers 3.3.1 (vector embeddings)
 
 ## Testing
 
-**Total: 83 tests**
+**Total: 116 tests**
 
 - Phase 1: 13 tests (PDF loading)
 - Phase 2: 40 tests (Text cleaning)
 - Phase 3: 30 tests (Document chunking)
+- Phase 4: 33 tests (Embedding generation)
 
 All tests use dynamically generated data - no mocked outputs or hardcoded expectations.
 
@@ -266,8 +320,9 @@ All tests use dynamically generated data - no mocked outputs or hardcoded expect
 1. **Production-ready**: Full error handling, type hints, docstrings
 2. **Clean architecture**: Separation of concerns, reusable components
 3. **Dynamic operation**: No hardcoded content or mock data
-4. **Comprehensive testing**: 83 tests covering all functionality
+4. **Comprehensive testing**: 116 tests covering all functionality
 5. **Extensible**: Easy to add new phases or modify existing ones
+6. **Local execution**: All models run locally, no API dependencies
 
 ## Use Cases
 
@@ -276,15 +331,18 @@ All tests use dynamically generated data - no mocked outputs or hardcoded expect
 - Contract parsing and search
 - Knowledge base construction
 - RAG (Retrieval Augmented Generation) preparation
+- Semantic search implementation
+- Document similarity analysis
 
 ## Next Steps
 
-This system provides the foundation for:
-- Vector embedding generation
-- Semantic search implementation
-- Question answering systems
-- Document comparison
-- Automated claim processing
+This system now provides:
+- ✅ Vector embedding generation
+- Ready for vector database storage (Pinecone, Weaviate, ChromaDB)
+- Ready for semantic search implementation
+- Ready for question answering systems
+- Ready for document comparison
+- Ready for automated claim processing
 
 ## License
 
